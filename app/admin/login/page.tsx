@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
+const ADMIN_EMAIL = "maspri2904@gmail.com";
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -15,9 +17,9 @@ export default function AdminLoginPage() {
     e.preventDefault(); setError(""); setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
-    if (data.user?.app_metadata?.role !== "admin") {
+    if (data.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
       await supabase.auth.signOut();
-      setError("Akun ini bukan akun admin."); setLoading(false); return;
+      setError("Email ini bukan akun admin."); setLoading(false); return;
     }
     router.replace("/admin"); router.refresh();
   }
