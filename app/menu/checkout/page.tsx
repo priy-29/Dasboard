@@ -3,40 +3,65 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
-const names: Record<string, string> = { "1": "Nasi Ayam Bakar", "2": "Nasi Goreng Spesial", "3": "Mie Goreng Jawa", "4": "Es Teh Manis", "5": "Es Jeruk", "6": "Kopi Susu" };
-const CART_KEY = "dasboard-cart";
+const CART_KEY = "dasboard_cart";
+
+type Cart = Record<string, number>;
 
 export default function CheckoutPage() {
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Cart>({});
   const [sent, setSent] = useState(false);
   const [orderId, setOrderId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", address: "", notes: "", payment: "cod" });
 
-  useEffect(() => { try { setCart(JSON.parse(localStorage.getItem(CART_KEY) || "{}")); } catch {} }, []);
+  useEffect(() => {
+    try {
+      setCart(JSON.parse(sessionStorage.getItem(CART_KEY) || "{}"));
+    } catch {
+      setCart({});
+    }
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const items = Object.entries(cart).filter(([, quantity]) => quantity > 0).map(([id, quantity]) => ({ name: names[id], quantity }));
-    if (!items.length) { setError("Keranjang masih kosong. Kembali ke menu dan pilih pesanan."); return; }
+
+    const items = Object.entries(cart)
+      .filter(([, quantity]) => quantity > 0)
+      .map(([product_id, quantity]) => ({ product_id, quantity }));
+
+    if (!items.length) {
+      setError("Keranjang masih kosong. Kembali ke menu dan pilih pesanan.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data: products, error: productsError } = await supabase.from("products").select("id,name").in("name", items.map(i => i.name));
-      if (productsError) throw productsError;
-      const payload = items.map(item => ({ product_id: products?.find(p => p.name === item.name)?.id, quantity: item.quantity })).filter(item => item.product_id);
-      if (payload.length !== items.length) throw new Error("Ada produk di keranjang yang sudah tidak tersedia.");
-      const { data, error: orderError } = await supabase.rpc("create_order_with_items", { p_customer_name: form.name, p_customer_phone: form.phone, p_customer_address: form.address, p_notes: form.notes, p_payment_method: form.payment, p_items: payload });
+      const { data, error: orderError } = await supabase.rpc("create_order_with_items", {
+        p_customer_name: form.name,
+        p_customer_phone: form.phone,
+        p_customer_address: form.address,
+        p_notes: form.notes,
+        p_payment_method: form.payment,
+        p_items: items,
+      });
+
       if (orderError) throw orderError;
-      localStorage.removeItem(CART_KEY);
+
+      sessionStorage.removeItem(CART_KEY);
       setOrderId(data);
       setSent(true);
-    } catch (err) { setError(err instanceof Error ? err.message : "Pesanan gagal dikirim."); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Pesanan gagal dikirim.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (sent) return <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-5"><div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-8 text-center"><div className="text-5xl">✅</div><h1 className="mt-5 text-2xl font-bold">Pesanan berhasil!</h1><p className="mt-2 text-zinc-500">Pesananmu sudah masuk ke sistem rumah makan.</p><p className="mt-4 rounded-xl bg-zinc-800 p-3 text-xs text-zinc-400">ID Pesanan: {orderId}</p><button onClick={() => location.href = "/menu"} className="mt-6 w-full rounded-xl bg-emerald-500 py-3 font-semibold text-zinc-950">Kembali ke Menu</button></div></main>;
+  if (sent) {
+    return <main className="flex min-h-screen items-center justify-center bg-zinc-950 p-5"><div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-900 p-8 text-center"><div className="text-5xl">✅</div><h1 className="mt-5 text-2xl font-bold">Pesanan berhasil!</h1><p className="mt-2 text-zinc-500">Pesananmu sudah masuk ke sistem rumah makan.</p><p className="mt-4 rounded-xl bg-zinc-800 p-3 text-xs text-zinc-400">ID Pesanan: {orderId}</p><button onClick={() => location.href = "/menu"} className="mt-6 w-full rounded-xl bg-emerald-500 py-3 font-semibold text-zinc-950">Kembali ke Menu</button></div></main>;
+  }
 
   return <main className="min-h-screen bg-zinc-950 p-5"><div className="mx-auto max-w-lg"><button onClick={() => history.back()} className="mb-6 text-sm text-zinc-500">← Kembali</button><h1 className="text-2xl font-bold">Checkout</h1><p className="mt-1 text-sm text-zinc-500">Lengkapi data untuk mengirim pesanan.</p><form onSubmit={submit} className="mt-7 space-y-4">
     <label className="block text-sm">Nama<input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 outline-none focus:border-emerald-500" placeholder="Nama lengkap" /></label>
