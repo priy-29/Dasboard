@@ -31,10 +31,18 @@ returns jsonb language plpgsql security definer set search_path=public as $$
 declare result jsonb;
 begin
   select coalesce(jsonb_agg(to_jsonb(x) order by x.created_at asc),'[]'::jsonb) into result
-  from (select id,customer_name,customer_phone,customer_address,notes,payment_method,status,subtotal,delivery_fee,total,created_at,delivery_method,customer_lat,customer_lng,delivery_distance_km,courier_lat,courier_lng,courier_updated_at,courier_tracking,delivery_arrival_requested_at,delivery_confirmed_at from public.orders where delivery_method='delivery' and status='delivering' order by created_at asc) x;
+  from (select id,customer_name,customer_phone,customer_address,notes,payment_method,status,subtotal,delivery_fee,total,created_at,delivery_method,customer_lat,customer_lng,delivery_distance_km,courier_lat,courier_lng,courier_updated_at,courier_tracking,delivery_arrival_requested_at,delivery_confirmed_at from public.orders where delivery_method='delivery' and status in ('processing','delivering') order by created_at asc) x;
   return result;
 end; $$;
 grant execute on function public.get_courier_tasks() to anon,authenticated;
+
+create or replace function public.claim_delivery_task(p_order_id uuid)
+returns boolean language plpgsql security definer set search_path=public as $$
+begin
+  update public.orders set status='delivering' where id=p_order_id and delivery_method='delivery' and status='processing';
+  return found;
+end; $$;
+grant execute on function public.claim_delivery_task(uuid) to anon,authenticated;
 
 create or replace function public.update_courier_location(p_order_id uuid,p_lat double precision,p_lng double precision)
 returns boolean language plpgsql security definer set search_path=public as $$
