@@ -6,7 +6,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     {children}
     <AdminBottomNav/>
     <style>{`
-      .admin-shell{min-height:100vh;background:radial-gradient(circle at 85% 0%,rgba(16,185,129,.12),transparent 30%),radial-gradient(circle at 8% 22%,rgba(59,130,246,.07),transparent 28%),#09090b}
+      .admin-shell{min-height:100dvh;background:radial-gradient(circle at 85% 0%,rgba(16,185,129,.12),transparent 30%),radial-gradient(circle at 8% 22%,rgba(59,130,246,.07),transparent 28%),#09090b}
       .admin-shell main{background:transparent!important}
       .admin-shell section{border-color:rgba(63,63,70,.7)!important;background:rgba(24,24,27,.82)!important;box-shadow:0 16px 45px rgba(0,0,0,.16);backdrop-filter:blur(12px)}
       .admin-shell article{border-color:rgba(63,63,70,.65)!important;background:rgba(9,9,11,.58);transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease}
@@ -17,7 +17,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       .admin-shell h1{letter-spacing:-.04em}
       .admin-shell input,.admin-shell select{box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
       .admin-shell select{cursor:pointer}
-      @media(max-width:1023px){.admin-shell{padding-bottom:78px}.admin-shell main{padding-left:14px!important;padding-right:14px!important}.admin-shell section{border-radius:22px!important}.admin-shell article{border-radius:18px!important}}
+      .admin-shell .admin-bottom-nav{display:none}
+      @media(max-width:1023px){
+        .admin-shell{padding-bottom:0}
+        .admin-shell main{padding-left:0!important;padding-right:0!important;padding-bottom:0!important}
+        .admin-shell main>div>div{padding-bottom:86px!important}
+        .admin-shell header{position:relative!important;top:auto!important;padding:12px 14px!important}
+        .admin-shell header>div:first-child>div:first-child>button{display:none!important}
+        .admin-shell header>div.mt-3{display:none!important}
+        .admin-shell main nav.fixed.bottom-0{display:none!important}
+        .admin-shell section{border-radius:22px!important}
+        .admin-shell article{border-radius:18px!important}
+        .admin-shell .admin-bottom-nav{display:block}
+      }
     `}</style>
   </div>;
 }
