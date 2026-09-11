@@ -4,131 +4,25 @@ import { useEffect, useRef, useState } from "react";
 import LiveMap from "../../components/LiveMap";
 import { supabase } from "../../lib/supabase";
 
-const REST_LAT = -7.396963;
-const REST_LNG = 109.199585;
-
-type Order = {
-  id: string;
-  customer_name: string;
-  customer_phone: string;
-  customer_address: string;
-  notes: string | null;
-  payment_method: string;
-  status: string;
-  subtotal: number;
-  delivery_fee: number;
-  total: number;
-  created_at: string;
-  delivery_method: string;
-  customer_lat: number | null;
-  customer_lng: number | null;
-  delivery_distance_km: number | null;
-  courier_lat: number | null;
-  courier_lng: number | null;
-  courier_updated_at: string | null;
-  courier_tracking: boolean;
-  delivery_arrival_requested_at: string | null;
-  delivery_confirmed_at: string | null;
-};
-
-function mapsUrl(lat:number,lng:number,originLat?:number|null,originLng?:number|null){
-  const origin=originLat!=null&&originLng!=null?`${originLat},${originLng}`:`${REST_LAT},${REST_LNG}`;
-  return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${lat},${lng}&travelmode=driving`;
-}
+const REST_LAT=-7.396963,REST_LNG=109.199585;
+type Order={id:string;customer_name:string;customer_phone:string;customer_address:string;notes:string|null;payment_method:string;status:string;subtotal:number;delivery_fee:number;total:number;created_at:string;delivery_method:string;customer_lat:number|null;customer_lng:number|null;delivery_distance_km:number|null;courier_lat:number|null;courier_lng:number|null;courier_updated_at:string|null;courier_tracking:boolean;delivery_arrival_requested_at:string|null;delivery_confirmed_at:string|null};
+const mapsUrl=(lat:number,lng:number,ol?:number|null,og?:number|null)=>`https://www.google.com/maps/dir/?api=1&origin=${ol!=null&&og!=null?`${ol},${og}`:`${REST_LAT},${REST_LNG}`}&destination=${lat},${lng}&travelmode=driving`;
 
 export default function CourierPage(){
-  const[orders,setOrders]=useState<Order[]>([]);
-  const[order,setOrder]=useState<Order|null>(null);
-  const[error,setError]=useState("");
-  const[loading,setLoading]=useState(true);
-  const[tracking,setTracking]=useState(false);
-  const[requesting,setRequesting]=useState(false);
-  const watch=useRef<number|null>(null);
-
-  async function loadTasks(){
-    const{data,error:rpcError}=await supabase.rpc("get_courier_tasks");
-    if(rpcError){setError(`Gagal mengambil tugas kurir: ${rpcError.message}`);setLoading(false);return;}
-    const list=(Array.isArray(data)?data:[]) as Order[];
-    setOrders(list);
-    setOrder(current=>{
-      if(!current)return null;
-      const fresh=list.find(item=>item.id===current.id);
-      if(!fresh){setTracking(false);return null;}
-      setTracking(Boolean(fresh.courier_tracking));
-      return fresh;
-    });
-    setLoading(false);
-  }
-
-  function selectTask(nextOrder:Order){setError("");setOrder(nextOrder);setTracking(Boolean(nextOrder.courier_tracking));}
-
-  async function sendLocation(orderId:string,lat:number,lng:number){
-    const{error:rpcError}=await supabase.rpc("update_courier_location",{p_order_id:orderId,p_lat:lat,p_lng:lng});
-    if(rpcError){setError(`Gagal mengirim GPS: ${rpcError.message}`);return;}
-    setOrder(current=>current&&current.id===orderId?{...current,courier_lat:lat,courier_lng:lng,courier_updated_at:new Date().toISOString(),courier_tracking:true}:current);
-  }
-
-  async function startTracking(){
-    if(!order||order.delivery_arrival_requested_at)return;
-    if(!navigator.geolocation){setError("Browser ini tidak mendukung GPS.");return;}
-    setError("");
-    const orderId=order.id;
-    const{error:trackingError}=await supabase.rpc("set_courier_tracking",{p_order_id:orderId,p_enabled:true});
-    if(trackingError){setError(`Gagal mengaktifkan tracking: ${trackingError.message}`);return;}
-    navigator.geolocation.getCurrentPosition(position=>{
-      const{latitude:lat,longitude:lng}=position.coords;
-      setTracking(true);void sendLocation(orderId,lat,lng);
-      watch.current=navigator.geolocation.watchPosition(next=>void sendLocation(orderId,next.coords.latitude,next.coords.longitude),gpsError=>setError(`GPS: ${gpsError.message}`),{enableHighAccuracy:true,maximumAge:3000,timeout:10000});
-    },gpsError=>{
-      setTracking(false);
-      void supabase.rpc("set_courier_tracking",{p_order_id:orderId,p_enabled:false});
-      setError(`GPS: ${gpsError.message}. Izinkan lokasi untuk mulai OTW.`);
-    },{enableHighAccuracy:true,maximumAge:0,timeout:15000});
-  }
-
-  async function stopTracking(){
-    if(!order)return;
-    if(watch.current!=null){navigator.geolocation.clearWatch(watch.current);watch.current=null;}
-    await supabase.rpc("set_courier_tracking",{p_order_id:order.id,p_enabled:false});
-    setTracking(false);await loadTasks();
-  }
-
-  async function requestBuyerConfirmation(){
-    if(!order||requesting||order.delivery_arrival_requested_at)return;
-    const ok=window.confirm(`Pesanan #${order.id.slice(0,8)} sudah sampai ke ${order.customer_name}?\n\nSetelah ini status tetap "Diantar" sampai pembeli menyetujui penerimaan.`);
-    if(!ok)return;
-    setRequesting(true);setError("");
-    if(watch.current!=null){navigator.geolocation.clearWatch(watch.current);watch.current=null;}
-    await supabase.rpc("set_courier_tracking",{p_order_id:order.id,p_enabled:false});
-    const{data,error:rpcError}=await supabase.rpc("request_delivery_confirmation",{p_order_id:order.id});
-    if(rpcError){setRequesting(false);setError(`Gagal meminta persetujuan pembeli: ${rpcError.message}`);return;}
-    if(!data){setRequesting(false);setError("Permintaan tidak bisa dikirim. Status mungkin sudah berubah.");return;}
-    setTracking(false);setRequesting(false);await loadTasks();
-  }
-
-  useEffect(()=>{
-    void loadTasks();
-    const timer=window.setInterval(()=>void loadTasks(),5000);
-    return()=>{window.clearInterval(timer);if(watch.current!=null)navigator.geolocation.clearWatch(watch.current);};
-  },[]);
-
-  const points=order?[{lat:REST_LAT,lng:REST_LNG,label:"Rumah makan",emoji:"🏠",className:"bg-emerald-500"},...(order.customer_lat!=null&&order.customer_lng!=null?[{lat:order.customer_lat,lng:order.customer_lng,label:"Pelanggan",emoji:"📍",className:"bg-blue-500"}]:[]),...(order.courier_lat!=null&&order.courier_lng!=null?[{lat:order.courier_lat,lng:order.courier_lng,label:tracking?"Kurir · LIVE":"Kurir",emoji:"🛵",className:"bg-orange-500"}]:[])]:[];
-  const hasCustomer=order?.customer_lat!=null&&order?.customer_lng!=null;
-  const navigationUrl=hasCustomer?mapsUrl(order!.customer_lat!,order!.customer_lng!,order!.courier_lat,order!.courier_lng):"";
-  const waitingApproval=Boolean(order?.delivery_arrival_requested_at);
-
-  return <main className="min-h-screen bg-zinc-950 p-5 text-white"><div className="mx-auto max-w-lg">
-    <button onClick={()=>location.href="/admin"} className="mb-6 text-sm text-zinc-500">← Dashboard</button>
-    <div className="text-center"><div className="text-5xl">🛵</div><h1 className="mt-3 text-2xl font-bold">Tugas Kurir</h1><p className="mt-1 text-sm text-zinc-500">Pesanan yang admin ubah menjadi <b className="text-orange-400">Diantar</b> muncul otomatis di sini.</p></div>
-    {error&&<p className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-400">{error}</p>}
-    <section className="mt-6 rounded-3xl border border-zinc-800 bg-zinc-900 p-4"><div className="flex items-center justify-between"><div><h2 className="font-bold">📦 Siap diantar</h2><p className="text-xs text-zinc-500">Refresh otomatis setiap 5 detik</p></div><span className="rounded-full bg-orange-950 px-3 py-1 text-xs font-semibold text-orange-300">{orders.length} tugas</span></div>
-      {loading?<p className="py-8 text-center text-zinc-500">Mencari tugas...</p>:orders.length===0?<div className="py-8 text-center"><p className="text-zinc-400">Belum ada pesanan untuk diantar.</p><p className="mt-1 text-xs text-zinc-600">Admin tinggal pilih status <b>Diantar</b> pada pesanan.</p></div>:<div className="mt-4 space-y-2">{orders.map(item=><button key={item.id} onClick={()=>selectTask(item)} className={`w-full rounded-2xl border p-4 text-left ${order?.id===item.id?"border-emerald-500 bg-emerald-950/20":"border-zinc-800 bg-zinc-950"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold">{item.customer_name}</p><p className="mt-1 truncate text-xs text-zinc-500">#{item.id.slice(0,8)} · {item.customer_address}</p></div><span className="shrink-0 text-xs text-orange-300">{item.delivery_arrival_requested_at?"⏳ Menunggu persetujuan":item.courier_tracking?"● LIVE":"🚚 Diantar"}</span></div><div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400"><span className="rounded-full bg-zinc-900 px-2 py-1">💰 Rp {item.total.toLocaleString("id-ID")}</span>{item.delivery_distance_km!=null&&<span className="rounded-full bg-zinc-900 px-2 py-1">📍 {Number(item.delivery_distance_km).toFixed(1)} km</span>}</div></button>)}</div>}
-    </section>
-    {order&&<section className="mt-5 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900"><div className="p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-emerald-400">Tugas aktif · #{order.id.slice(0,8)}</p><h2 className="mt-1 text-xl font-bold">Antar ke {order.customer_name}</h2><p className="mt-1 text-sm text-zinc-400">{order.customer_address}</p><p className="mt-2 text-xs text-zinc-500">{order.customer_phone} · {order.payment_method.toUpperCase()}</p></div><span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${tracking?"bg-emerald-500 text-zinc-950":"bg-orange-950 text-orange-300"}`}>{tracking?"● GPS LIVE":waitingApproval?"⏳ MENUNGGU": "GPS BELUM AKTIF"}</span></div>
-      <div className="mt-4 rounded-2xl border border-blue-900/50 bg-blue-950/20 p-3 text-xs text-blue-200">{waitingApproval?"🤝 Kurir sudah tiba. Menunggu pembeli menekan tombol persetujuan penerimaan.":tracking?"📍 GPS asli HP kurir sedang dikirim ke server.":"📍 Tekan Mulai OTW untuk meminta izin lokasi dan memakai koordinat GPS asli HP kurir."}</div>
-    </div><LiveMap points={points}/><div className="p-5"><div className="grid grid-cols-2 gap-2"><button onClick={tracking?stopTracking:startTracking} disabled={waitingApproval||requesting} className={`rounded-xl py-3 text-sm font-bold ${tracking?"bg-red-500 text-white":"bg-emerald-500 text-zinc-950"} disabled:cursor-not-allowed disabled:opacity-50`}>{tracking?"⏹ Hentikan OTW":"📍 Izinkan GPS & Mulai OTW"}</button>{hasCustomer&&<a href={navigationUrl} target="_blank" rel="noreferrer" className="rounded-xl border border-zinc-700 py-3 text-center text-sm font-semibold">🧭 Navigasi</a>}</div>
-      <button onClick={requestBuyerConfirmation} disabled={waitingApproval||requesting} className="mt-3 w-full rounded-xl bg-blue-500 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{requesting?"⏳ Mengirim permintaan...":waitingApproval?"⏳ Menunggu persetujuan pembeli":"🤝 Minta Persetujuan Pembeli"}</button>
-      <div className="mt-3 rounded-xl bg-zinc-950 p-3 text-xs text-zinc-500">{order.courier_updated_at?`GPS terakhir: ${new Date(order.courier_updated_at).toLocaleTimeString("id-ID")}`:"GPS kurir belum tersedia"}{" · Status selesai hanya setelah pembeli menyetujui."}</div>
-    </div></section>}
-  </div></main>;
+ const[orders,setOrders]=useState<Order[]>([]),[order,setOrder]=useState<Order|null>(null),[tab,setTab]=useState<"ready"|"active">("ready"),[error,setError]=useState(""),[loading,setLoading]=useState(true),[tracking,setTracking]=useState(false),[claiming,setClaiming]=useState(false),[requesting,setRequesting]=useState(false);const watch=useRef<number|null>(null);
+ async function loadTasks(){const{data,error:e}=await supabase.rpc("get_courier_tasks");if(e){setError(`Gagal mengambil tugas kurir: ${e.message}`);setLoading(false);return}const list=(Array.isArray(data)?data:[]) as Order[];setOrders(list);setOrder(cur=>{if(!cur)return null;const fresh=list.find(x=>x.id===cur.id);if(!fresh){setTracking(false);return null}setTracking(Boolean(fresh.courier_tracking));return fresh});setLoading(false)}
+ function selectTask(x:Order){setError("");setOrder(x);setTracking(Boolean(x.courier_tracking));setTab(x.status==="processing"?"ready":"active")}
+ async function claimTask(){if(!order||order.status!=="processing"||claiming)return;setClaiming(true);setError("");const{data,error:e}=await supabase.rpc("claim_delivery_task",{p_order_id:order.id});if(e)setError(`Gagal mengambil pesanan: ${e.message}`);else if(!data)setError("Pesanan sudah diambil kurir lain atau status berubah.");else{setTab("active");await loadTasks()}setClaiming(false)}
+ async function sendLocation(id:string,lat:number,lng:number){const{error:e}=await supabase.rpc("update_courier_location",{p_order_id:id,p_lat:lat,p_lng:lng});if(e){setError(`Gagal mengirim GPS: ${e.message}`);return}setOrder(cur=>cur&&cur.id===id?{...cur,courier_lat:lat,courier_lng:lng,courier_updated_at:new Date().toISOString(),courier_tracking:true}:cur)}
+ async function startTracking(){if(!order||order.status!=="delivering"||order.delivery_arrival_requested_at)return;if(!navigator.geolocation){setError("Browser ini tidak mendukung GPS.");return}setError("");const id=order.id;const{error:e}=await supabase.rpc("set_courier_tracking",{p_order_id:id,p_enabled:true});if(e){setError(`Gagal mengaktifkan tracking: ${e.message}`);return}navigator.geolocation.getCurrentPosition(p=>{setTracking(true);void sendLocation(id,p.coords.latitude,p.coords.longitude);watch.current=navigator.geolocation.watchPosition(n=>void sendLocation(id,n.coords.latitude,n.coords.longitude),g=>setError(`GPS: ${g.message}`),{enableHighAccuracy:true,maximumAge:3000,timeout:10000})},g=>{setTracking(false);void supabase.rpc("set_courier_tracking",{p_order_id:id,p_enabled:false});setError(`GPS: ${g.message}. Izinkan lokasi untuk mulai OTW.`)},{enableHighAccuracy:true,maximumAge:0,timeout:15000})}
+ async function stopTracking(){if(!order)return;if(watch.current!=null){navigator.geolocation.clearWatch(watch.current);watch.current=null}await supabase.rpc("set_courier_tracking",{p_order_id:order.id,p_enabled:false});setTracking(false);await loadTasks()}
+ async function requestBuyerConfirmation(){if(!order||requesting||order.status!=="delivering"||order.delivery_arrival_requested_at)return;const ok=window.confirm(`Pesanan #${order.id.slice(0,8)} sudah sampai ke ${order.customer_name}?\n\nStatus tetap Diantar sampai pembeli menyetujui penerimaan.`);if(!ok)return;setRequesting(true);setError("");if(watch.current!=null){navigator.geolocation.clearWatch(watch.current);watch.current=null}await supabase.rpc("set_courier_tracking",{p_order_id:order.id,p_enabled:false});const{data,error:e}=await supabase.rpc("request_delivery_confirmation",{p_order_id:order.id});if(e)setError(`Gagal meminta persetujuan pembeli: ${e.message}`);else if(!data)setError("Permintaan tidak bisa dikirim. Status mungkin sudah berubah.");else await loadTasks();setTracking(false);setRequesting(false)}
+ useEffect(()=>{void loadTasks();const t=window.setInterval(()=>void loadTasks(),5000);return()=>{window.clearInterval(t);if(watch.current!=null)navigator.geolocation.clearWatch(watch.current)}},[]);
+ const ready=orders.filter(x=>x.status==="processing"),active=orders.filter(x=>x.status==="delivering"),waiting=active.filter(x=>x.delivery_arrival_requested_at),shown=tab==="ready"?ready:active;const hasCustomer=order?.customer_lat!=null&&order?.customer_lng!=null;const waitingApproval=Boolean(order?.delivery_arrival_requested_at);const points=order?[{lat:REST_LAT,lng:REST_LNG,label:"Rumah makan",emoji:"🏠",className:"bg-emerald-500"},...(hasCustomer?[{lat:order.customer_lat!,lng:order.customer_lng!,label:"Pelanggan",emoji:"📍",className:"bg-blue-500"}]:[]),...(order.courier_lat!=null&&order.courier_lng!=null?[{lat:order.courier_lat,lng:order.courier_lng,label:tracking?"Kurir · LIVE":"Kurir",emoji:"🛵",className:"bg-orange-500"}]:[])]:[];
+ return <main className="min-h-screen bg-zinc-950 p-5 text-white"><div className="mx-auto max-w-lg"><button onClick={()=>location.href="/admin"} className="mb-6 text-sm text-zinc-500">← Dashboard</button><div className="text-center"><div className="text-5xl">🛵</div><h1 className="mt-3 text-2xl font-bold">Tugas Kurir</h1><p className="mt-1 text-sm text-zinc-500">Pesanan <b className="text-orange-400">Diantar</b> dikelola dari sini. Pesanan Ambil sendiri tidak masuk kurir.</p></div>{error&&<p className="mt-4 rounded-xl border border-red-900 bg-red-950/40 p-3 text-sm text-red-400">{error}</p>}
+ <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-800 bg-zinc-900 p-2"><button onClick={()=>setTab("ready")} className={`rounded-xl py-3 text-sm font-bold ${tab==="ready"?"bg-emerald-500 text-zinc-950":"text-zinc-400"}`}>📦 Siap Diambil <span className="ml-1">{ready.length}</span></button><button onClick={()=>setTab("active")} className={`rounded-xl py-3 text-sm font-bold ${tab==="active"?"bg-orange-500 text-zinc-950":"text-zinc-400"}`}>🛵 Sedang Diantar <span className="ml-1">{active.length}</span></button></div>
+ <section className="mt-3 rounded-3xl border border-zinc-800 bg-zinc-900 p-4"><div className="flex items-center justify-between"><div><h2 className="font-bold">{tab==="ready"?"📦 Order Siap Diambil":"🛵 Order Aktif"}</h2><p className="text-xs text-zinc-500">Refresh otomatis setiap 5 detik</p></div><span className="rounded-full bg-zinc-950 px-3 py-1 text-xs text-zinc-400">{shown.length}</span></div>{loading?<p className="py-8 text-center text-zinc-500">Memuat...</p>:shown.length===0?<p className="py-8 text-center text-zinc-500">{tab==="ready"?"Belum ada order siap diambil.":"Belum ada order yang sedang diantar."}</p>:<div className="mt-4 space-y-2">{shown.map(x=><button key={x.id} onClick={()=>selectTask(x)} className={`w-full rounded-2xl border p-4 text-left ${order?.id===x.id?"border-emerald-500 bg-emerald-950/20":"border-zinc-800 bg-zinc-950"}`}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold">{x.customer_name}</p><p className="mt-1 truncate text-xs text-zinc-500">#{x.id.slice(0,8)} · {x.customer_address}</p></div><span className="shrink-0 text-xs text-orange-300">{x.status==="processing"?"📦 Siap diambil":x.delivery_arrival_requested_at?"⏳ Menunggu":x.courier_tracking?"● LIVE":"🛵 Diantar"}</span></div><div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400"><span className="rounded-full bg-zinc-900 px-2 py-1">💰 Rp {x.total.toLocaleString("id-ID")}</span>{x.delivery_distance_km!=null&&<span className="rounded-full bg-zinc-900 px-2 py-1">📍 {Number(x.delivery_distance_km).toFixed(1)} km</span>}</div></button>)}</div>}</section>
+ {tab==="active"&&waiting.length>0&&<p className="mt-3 rounded-xl border border-blue-900 bg-blue-950/30 p-3 text-xs text-blue-200">🤝 {waiting.length} order sudah dinyatakan sampai dan sedang menunggu persetujuan pembeli.</p>}
+ {order&&<section className="mt-5 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900"><div className="p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-emerald-400">{order.status==="processing"?"Siap Diambil":"Pengantaran Aktif"} · #{order.id.slice(0,8)}</p><h2 className="mt-1 text-xl font-bold">{order.status==="processing"?`Ambil untuk ${order.customer_name}`:`Antar ke ${order.customer_name}`}</h2><p className="mt-1 text-sm text-zinc-400">{order.customer_address}</p><p className="mt-2 text-xs text-zinc-500">{order.customer_phone} · {order.payment_method.toUpperCase()}</p></div><span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${tracking?"bg-emerald-500 text-zinc-950":waitingApproval?"bg-blue-950 text-blue-300":"bg-orange-950 text-orange-300"}`}>{tracking?"● GPS LIVE":waitingApproval?"⏳ MENUNGGU":"📦 SIAP"}</span></div>{order.status==="processing"?<div className="mt-4 rounded-2xl border border-emerald-900/50 bg-emerald-950/20 p-4 text-sm text-emerald-200">📦 Pesanan sudah diproses dan siap diambil kurir.</div>:<div className="mt-4 rounded-2xl border border-blue-900/50 bg-blue-950/20 p-3 text-xs text-blue-200">{waitingApproval?"🤝 Kurir sudah tiba. Menunggu pembeli menekan tombol persetujuan penerimaan.":tracking?"📍 GPS asli HP kurir sedang dikirim ke server.":"📍 Tekan Mulai OTW untuk meminta izin lokasi dan memakai koordinat GPS asli HP kurir."}</div>}</div>{order.status==="delivering"&&<LiveMap points={points}/>}<div className="p-5">{order.status==="processing"?<button onClick={claimTask} disabled={claiming} className="w-full rounded-xl bg-emerald-500 py-3 text-sm font-bold text-zinc-950 disabled:opacity-50">{claiming?"⏳ Mengambil...":"📦 Ambil Pesanan"}</button>:<><div className="grid grid-cols-2 gap-2"><button onClick={tracking?stopTracking:startTracking} disabled={waitingApproval||requesting} className={`rounded-xl py-3 text-sm font-bold ${tracking?"bg-red-500":"bg-emerald-500 text-zinc-950"} disabled:opacity-50`}>{tracking?"⏹ Hentikan OTW":"📍 Mulai OTW"}</button>{hasCustomer&&<a href={mapsUrl(order.customer_lat!,order.customer_lng!,order.courier_lat,order.courier_lng)} target="_blank" rel="noreferrer" className="rounded-xl border border-zinc-700 py-3 text-center text-sm font-semibold">🧭 Navigasi</a>}</div><button onClick={requestBuyerConfirmation} disabled={waitingApproval||requesting} className="mt-3 w-full rounded-xl bg-blue-500 py-3 text-sm font-bold disabled:opacity-50">{requesting?"⏳ Mengirim...":waitingApproval?"⏳ Menunggu persetujuan pembeli":"🤝 Minta Persetujuan Pembeli"}</button></>}<div className="mt-3 rounded-xl bg-zinc-950 p-3 text-xs text-zinc-500">{order.courier_updated_at?`GPS terakhir: ${new Date(order.courier_updated_at).toLocaleTimeString("id-ID")}`:"GPS kurir belum tersedia"} · Selesai hanya setelah pembeli menyetujui.</div></div></section>}
+ </div></main>;
 }
