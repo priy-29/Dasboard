@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
@@ -13,12 +13,26 @@ export default function AdminLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (cancelled || !data.user) return;
+      if (data.user.email?.toLowerCase() === ADMIN_EMAIL) { router.replace("/admin"); return; }
+      const { data: courier } = await supabase.from("couriers").select("is_active").eq("id", data.user.id).maybeSingle();
+      if (!cancelled && courier?.is_active) router.replace("/courier");
+    })();
+    return () => { cancelled = true; };
+  }, [router]);
+
   async function login(e: FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); return; }
     if (data.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
+      const { data: courier } = await supabase.from("couriers").select("is_active").eq("id", data.user?.id || "").maybeSingle();
       await supabase.auth.signOut();
+      if (courier?.is_active) { router.replace("/courier/login"); router.refresh(); return; }
       setError("Email ini bukan akun admin."); setLoading(false); return;
     }
     router.replace("/admin"); router.refresh();
