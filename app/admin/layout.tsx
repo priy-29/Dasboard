@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       .admin-shell input,.admin-shell select{box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
       .admin-shell select{cursor:pointer}
       .admin-shell .admin-bottom-nav{display:none}
+      .admin-shell header .relative.rounded-xl.border{display:none!important}
       @media(max-width:1023px){
         .admin-shell{padding-bottom:0}
         .admin-shell main{padding-left:0!important;padding-right:0!important;padding-bottom:0!important}
@@ -27,7 +28,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         .admin-shell header{position:relative!important;top:auto!important;padding:12px 14px!important;padding-right:66px!important}
         .admin-shell header>div:first-child>div:first-child>button{display:none!important}
         .admin-shell header>div.mt-3{display:none!important}
-        .admin-shell header .relative.rounded-xl.border{display:none!important}
         .admin-shell section{border-radius:22px!important}
         .admin-shell article{border-radius:18px!important}
         .admin-shell .admin-bottom-nav{display:block}
