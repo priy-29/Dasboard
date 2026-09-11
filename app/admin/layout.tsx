@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import AdminBottomNav from "../../components/AdminBottomNav";
+import AdminNotificationBell from "../../components/AdminNotificationBell";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return <div className="admin-shell">
     {children}
+    <AdminNotificationBell/>
     <AdminBottomNav/>
     <style>{`
       .admin-shell{min-height:100dvh;background:radial-gradient(circle at 85% 0%,rgba(16,185,129,.12),transparent 30%),radial-gradient(circle at 8% 22%,rgba(59,130,246,.07),transparent 28%),#09090b}
@@ -22,14 +24,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         .admin-shell{padding-bottom:0}
         .admin-shell main{padding-left:0!important;padding-right:0!important;padding-bottom:0!important}
         .admin-shell main>div>div{padding-bottom:86px!important}
-        .admin-shell header{position:relative!important;top:auto!important;padding:12px 14px!important}
+        .admin-shell header{position:relative!important;top:auto!important;padding:12px 14px!important;padding-right:66px!important}
         .admin-shell header>div:first-child>div:first-child>button{display:none!important}
         .admin-shell header>div.mt-3{display:none!important}
-        .admin-shell main nav.fixed.bottom-0{display:none!important}
+        .admin-shell header .relative.rounded-xl.border{display:none!important}
         .admin-shell section{border-radius:22px!important}
         .admin-shell article{border-radius:18px!important}
         .admin-shell .admin-bottom-nav{display:block}
       }
+      @media(min-width:1024px){.admin-shell header{padding-right:72px!important}}
     `}</style>
   </div>;
 }
