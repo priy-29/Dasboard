@@ -49,6 +49,7 @@ export default function CourierPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [tracking, setTracking] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const watch = useRef<number | null>(null);
 
   async function loadTasks() {
@@ -190,6 +191,53 @@ export default function CourierPage() {
     });
 
     setTracking(false);
+    await loadTasks();
+  }
+
+  async function completeDelivery() {
+    if (!order || completing) return;
+
+    const confirmed = window.confirm(
+      `Yakin pesanan #${order.id.slice(0, 8)} sudah sampai ke ${order.customer_name}?`,
+    );
+
+    if (!confirmed) return;
+
+    setCompleting(true);
+    setError("");
+
+    if (watch.current != null) {
+      navigator.geolocation.clearWatch(watch.current);
+      watch.current = null;
+    }
+
+    if (tracking) {
+      await supabase.rpc("set_courier_tracking", {
+        p_order_id: order.id,
+        p_enabled: false,
+      });
+    }
+
+    const { data, error: completeError } = await supabase.rpc(
+      "courier_complete_delivery",
+      { p_order_id: order.id },
+    );
+
+    if (completeError) {
+      setCompleting(false);
+      setError(`Gagal menyelesaikan pesanan: ${completeError.message}`);
+      return;
+    }
+
+    if (!data) {
+      setCompleting(false);
+      setError("Pesanan tidak bisa diselesaikan. Status mungkin sudah berubah.");
+      return;
+    }
+
+    setTracking(false);
+    setOrder(null);
+    setCompleting(false);
     await loadTasks();
   }
 
@@ -383,11 +431,12 @@ export default function CourierPage() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={tracking ? stopTracking : startTracking}
+                  disabled={completing}
                   className={`rounded-xl py-3 text-sm font-bold ${
                     tracking
                       ? "bg-red-500 text-white"
                       : "bg-emerald-500 text-zinc-950"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
                   {tracking ? "⏹ Hentikan OTW" : "📍 Izinkan GPS & Mulai OTW"}
                 </button>
@@ -403,6 +452,14 @@ export default function CourierPage() {
                   </a>
                 )}
               </div>
+
+              <button
+                onClick={completeDelivery}
+                disabled={completing}
+                className="mt-3 w-full rounded-xl bg-blue-500 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {completing ? "⏳ Menyelesaikan..." : "✅ Pesanan Sudah Sampai"}
+              </button>
 
               <div className="mt-3 rounded-xl bg-zinc-950 p-3 text-xs text-zinc-500">
                 {order.courier_updated_at
