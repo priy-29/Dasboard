@@ -12,13 +12,13 @@ alter table public.orders add column if not exists courier_id uuid references pu
 
 create or replace function public.courier_is_active()
 returns boolean language sql stable security definer set search_path='' as $$
-  select exists(
-    select 1 from public.couriers c
-    where c.id=(select auth.uid()) and c.is_active=true
-  );
+  select exists(select 1 from public.couriers c where c.id=(select auth.uid()) and c.is_active=true);
 $$;
 revoke all on function public.courier_is_active() from public;
 grant execute on function public.courier_is_active() to authenticated;
+
+drop policy if exists "couriers can view own account" on public.couriers;
+create policy "couriers can view own account" on public.couriers for select to authenticated using (id=(select auth.uid()));
 
 create or replace function public.prepare_delivery_task()
 returns trigger language plpgsql security definer set search_path=public as $$
@@ -41,8 +41,7 @@ create or replace function public.get_courier_tasks()
 returns setof public.orders language plpgsql security definer set search_path=public as $$
 begin
   if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
-  return query
-    select o.* from public.orders o
+  return query select o.* from public.orders o
     where o.delivery_method='delivery'
       and ((o.status='processing' and o.courier_id is null) or (o.status='delivering' and o.courier_id=(select auth.uid())))
     order by o.created_at asc;
