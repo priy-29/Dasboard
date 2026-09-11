@@ -16,6 +16,9 @@ begin
     new.courier_lat:=null; new.courier_lng:=null; new.courier_updated_at:=null; new.courier_tracking:=false;
     new.delivery_arrival_requested_at:=null; new.delivery_confirmed_at:=null;
   end if;
+  if new.delivery_method='delivery' and new.status='completed' and new.delivery_confirmed_at is null then
+    raise exception 'Pesanan delivery wajib dikonfirmasi pembeli sebelum selesai';
+  end if;
   if new.status in ('completed','cancelled') then new.courier_tracking:=false; end if;
   return new;
 end; $$;
@@ -50,7 +53,6 @@ begin
 end; $$;
 grant execute on function public.set_courier_tracking(uuid,boolean) to anon,authenticated;
 
--- Kurir hanya meminta konfirmasi. Status belum boleh completed.
 create or replace function public.request_delivery_confirmation(p_order_id uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
@@ -59,7 +61,6 @@ begin
 end; $$;
 grant execute on function public.request_delivery_confirmation(uuid) to anon,authenticated;
 
--- Hanya persetujuan pembeli yang boleh mengubah delivering menjadi completed.
 create or replace function public.confirm_delivery_received(p_order_id uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
