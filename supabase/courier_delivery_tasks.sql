@@ -1,5 +1,5 @@
 -- ============================================================
--- COURIER DELIVERY TASKS - VERSI TERBARU
+-- COURIER DELIVERY TASKS - HARDENED
 -- ============================================================
 
 alter table public.orders add column if not exists courier_lat double precision;
@@ -8,6 +8,17 @@ alter table public.orders add column if not exists courier_updated_at timestampt
 alter table public.orders add column if not exists courier_tracking boolean not null default false;
 alter table public.orders add column if not exists delivery_arrival_requested_at timestamptz;
 alter table public.orders add column if not exists delivery_confirmed_at timestamptz;
+alter table public.orders add column if not exists courier_id uuid references public.couriers(id) on delete set null;
+
+create or replace function public.courier_is_active()
+returns boolean language sql stable security definer set search_path='' as $$
+  select exists(
+    select 1 from public.couriers c
+    where c.id=(select auth.uid()) and c.is_active=true
+  );
+$$;
+revoke all on function public.courier_is_active() from public;
+grant execute on function public.courier_is_active() to authenticated;
 
 create or replace function public.prepare_delivery_task()
 returns trigger language plpgsql security definer set search_path=public as $$
@@ -27,52 +38,68 @@ drop trigger if exists trg_prepare_delivery_task on public.orders;
 create trigger trg_prepare_delivery_task before update of status,delivery_method on public.orders for each row execute function public.prepare_delivery_task();
 
 create or replace function public.get_courier_tasks()
-returns jsonb language plpgsql security definer set search_path=public as $$
-declare result jsonb;
+returns setof public.orders language plpgsql security definer set search_path=public as $$
 begin
-  select coalesce(jsonb_agg(to_jsonb(x) order by x.created_at asc),'[]'::jsonb) into result
-  from (select id,customer_name,customer_phone,customer_address,notes,payment_method,status,subtotal,delivery_fee,total,created_at,delivery_method,customer_lat,customer_lng,delivery_distance_km,courier_lat,courier_lng,courier_updated_at,courier_tracking,delivery_arrival_requested_at,delivery_confirmed_at from public.orders where delivery_method='delivery' and status in ('processing','delivering') order by created_at asc) x;
-  return result;
+  if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
+  return query
+    select o.* from public.orders o
+    where o.delivery_method='delivery'
+      and ((o.status='processing' and o.courier_id is null) or (o.status='delivering' and o.courier_id=(select auth.uid())))
+    order by o.created_at asc;
 end; $$;
-grant execute on function public.get_courier_tasks() to anon,authenticated;
+revoke execute on function public.get_courier_tasks() from anon;
+grant execute on function public.get_courier_tasks() to authenticated;
 
 create or replace function public.claim_delivery_task(p_order_id uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
-  update public.orders set status='delivering' where id=p_order_id and delivery_method='delivery' and status='processing';
+  if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
+  update public.orders set courier_id=(select auth.uid()),status='delivering'
+  where id=p_order_id and delivery_method='delivery' and status='processing' and courier_id is null;
   return found;
 end; $$;
-grant execute on function public.claim_delivery_task(uuid) to anon,authenticated;
+revoke execute on function public.claim_delivery_task(uuid) from anon;
+grant execute on function public.claim_delivery_task(uuid) to authenticated;
 
 create or replace function public.update_courier_location(p_order_id uuid,p_lat double precision,p_lng double precision)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
+  if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
   if p_lat is null or p_lng is null or p_lat < -90 or p_lat > 90 or p_lng < -180 or p_lng > 180 then raise exception 'Koordinat kurir tidak valid'; end if;
-  update public.orders set courier_lat=p_lat,courier_lng=p_lng,courier_updated_at=now(),courier_tracking=true where id=p_order_id and delivery_method='delivery' and status='delivering' and delivery_arrival_requested_at is null;
+  update public.orders set courier_lat=p_lat,courier_lng=p_lng,courier_updated_at=now(),courier_tracking=true
+  where id=p_order_id and delivery_method='delivery' and status='delivering' and courier_id=(select auth.uid()) and delivery_arrival_requested_at is null;
   return found;
 end; $$;
-grant execute on function public.update_courier_location(uuid,double precision,double precision) to anon,authenticated;
+revoke execute on function public.update_courier_location(uuid,double precision,double precision) from anon;
+grant execute on function public.update_courier_location(uuid,double precision,double precision) to authenticated;
 
 create or replace function public.set_courier_tracking(p_order_id uuid,p_enabled boolean)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
-  update public.orders set courier_tracking=p_enabled,courier_updated_at=case when p_enabled then now() else courier_updated_at end where id=p_order_id and delivery_method='delivery' and status='delivering' and delivery_arrival_requested_at is null;
+  if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
+  update public.orders set courier_tracking=p_enabled,courier_updated_at=case when p_enabled then now() else courier_updated_at end
+  where id=p_order_id and delivery_method='delivery' and status='delivering' and courier_id=(select auth.uid()) and delivery_arrival_requested_at is null;
   return found;
 end; $$;
-grant execute on function public.set_courier_tracking(uuid,boolean) to anon,authenticated;
+revoke execute on function public.set_courier_tracking(uuid,boolean) from anon;
+grant execute on function public.set_courier_tracking(uuid,boolean) to authenticated;
 
 create or replace function public.request_delivery_confirmation(p_order_id uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
-  update public.orders set delivery_arrival_requested_at=coalesce(delivery_arrival_requested_at,now()),courier_tracking=false where id=p_order_id and delivery_method='delivery' and status='delivering';
+  if not public.courier_is_active() then raise exception 'Akun kurir tidak aktif'; end if;
+  update public.orders set delivery_arrival_requested_at=coalesce(delivery_arrival_requested_at,now()),courier_tracking=false
+  where id=p_order_id and delivery_method='delivery' and status='delivering' and courier_id=(select auth.uid()) and delivery_arrival_requested_at is null;
   return found;
 end; $$;
-grant execute on function public.request_delivery_confirmation(uuid) to anon,authenticated;
+revoke execute on function public.request_delivery_confirmation(uuid) from anon;
+grant execute on function public.request_delivery_confirmation(uuid) to authenticated;
 
 create or replace function public.confirm_delivery_received(p_order_id uuid)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
-  update public.orders set status='completed',delivery_confirmed_at=now(),courier_tracking=false where id=p_order_id and delivery_method='delivery' and status='delivering' and delivery_arrival_requested_at is not null;
+  update public.orders set status='completed',delivery_confirmed_at=now(),courier_tracking=false
+  where id=p_order_id and delivery_method='delivery' and status='delivering' and delivery_arrival_requested_at is not null;
   return found;
 end; $$;
 grant execute on function public.confirm_delivery_received(uuid) to anon,authenticated;
