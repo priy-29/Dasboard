@@ -7,7 +7,7 @@ create or replace function public.update_courier_location(p_order_id uuid,p_lat 
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
  if p_lat is null or p_lng is null or p_lat < -90 or p_lat > 90 or p_lng < -180 or p_lng > 180 then raise exception 'Koordinat kurir tidak valid'; end if;
- update public.orders set courier_lat=p_lat,courier_lng=p_lng,courier_updated_at=now(),courier_tracking=true,status=case when status='pending' then 'processing' else status end where id=p_order_id and delivery_method='delivery' and status not in ('completed','cancelled');
+ update public.orders set courier_lat=p_lat,courier_lng=p_lng,courier_updated_at=now(),courier_tracking=true where id=p_order_id and delivery_method='delivery' and status not in ('completed','cancelled');
  return found;
 end; $$;
 grant execute on function public.update_courier_location(uuid,double precision,double precision) to anon,authenticated;
@@ -15,7 +15,7 @@ grant execute on function public.update_courier_location(uuid,double precision,d
 create or replace function public.set_courier_tracking(p_order_id uuid,p_enabled boolean)
 returns boolean language plpgsql security definer set search_path=public as $$
 begin
- update public.orders set courier_tracking=p_enabled,courier_updated_at=case when p_enabled then now() else courier_updated_at end,status=case when p_enabled and status='pending' then 'processing' else status end where id=p_order_id and delivery_method='delivery' and status not in ('completed','cancelled');
+ update public.orders set courier_tracking=p_enabled,courier_updated_at=case when p_enabled then now() else courier_updated_at end where id=p_order_id and delivery_method='delivery' and status not in ('completed','cancelled');
  return found;
 end; $$;
 grant execute on function public.set_courier_tracking(uuid,boolean) to anon,authenticated;
