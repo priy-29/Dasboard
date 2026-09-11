@@ -39,6 +39,7 @@ function mapsUrl(
     originLat != null && originLng != null
       ? `${originLat},${originLng}`
       : `${REST_LAT},${REST_LNG}`;
+
   return `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${lat},${lng}&travelmode=driving`;
 }
 
@@ -64,11 +65,13 @@ export default function CourierPage() {
 
     setOrder((current) => {
       if (!current) return null;
+
       const fresh = list.find((item) => item.id === current.id);
       if (!fresh) {
         setTracking(false);
         return null;
       }
+
       setTracking(Boolean(fresh.courier_tracking));
       return fresh;
     });
@@ -90,7 +93,7 @@ export default function CourierPage() {
     });
 
     if (rpcError) {
-      setError(rpcError.message);
+      setError(`Gagal mengirim GPS: ${rpcError.message}`);
       return;
     }
 
@@ -117,20 +120,19 @@ export default function CourierPage() {
 
     setError("");
 
+    const orderId = order.id;
     const { error: trackingError } = await supabase.rpc(
       "set_courier_tracking",
       {
-        p_order_id: order.id,
+        p_order_id: orderId,
         p_enabled: true,
       },
     );
 
     if (trackingError) {
-      setError(trackingError.message);
+      setError(`Gagal mengaktifkan tracking: ${trackingError.message}`);
       return;
     }
-
-    const orderId = order.id;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -200,6 +202,7 @@ export default function CourierPage() {
 
     return () => {
       window.clearInterval(timer);
+
       if (watch.current != null) {
         navigator.geolocation.clearWatch(watch.current);
       }
@@ -266,7 +269,8 @@ export default function CourierPage() {
           <div className="text-5xl">🛵</div>
           <h1 className="mt-3 text-2xl font-bold">Tugas Kurir</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Pesanan yang admin ubah menjadi <b className="text-orange-400">Diantar</b> muncul otomatis di sini.
+            Pesanan yang admin ubah menjadi{" "}
+            <b className="text-orange-400">Diantar</b> muncul otomatis di sini.
           </p>
         </div>
 
@@ -280,7 +284,7 @@ export default function CourierPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-bold">📦 Siap diantar</h2>
-              <p className="text-xs text-zinc-500">Refresh otomatis</p>
+              <p className="text-xs text-zinc-500">Refresh otomatis setiap 5 detik</p>
             </div>
             <span className="rounded-full bg-orange-950 px-3 py-1 text-xs font-semibold text-orange-300">
               {orders.length} tugas
@@ -309,16 +313,17 @@ export default function CourierPage() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-semibold">{item.customer_name}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                      <p className="mt-1 truncate text-xs text-zinc-500">
                         #{item.id.slice(0, 8)} · {item.customer_address}
                       </p>
                     </div>
-                    <span className="text-xs text-orange-300">
+                    <span className="shrink-0 text-xs text-orange-300">
                       {item.courier_tracking ? "● LIVE" : "🚚 Diantar"}
                     </span>
                   </div>
+
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-400">
                     <span className="rounded-full bg-zinc-900 px-2 py-1">
                       💰 Rp {item.total.toLocaleString("id-ID")}
@@ -339,7 +344,7 @@ export default function CourierPage() {
           <section className="mt-5 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
             <div className="p-5">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-emerald-400">
                     Tugas aktif · #{order.id.slice(0, 8)}
                   </p>
@@ -353,8 +358,9 @@ export default function CourierPage() {
                     {order.customer_phone} · {order.payment_method.toUpperCase()}
                   </p>
                 </div>
+
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${
                     tracking
                       ? "bg-emerald-500 text-zinc-950"
                       : "bg-orange-950 text-orange-300"
@@ -401,4 +407,13 @@ export default function CourierPage() {
               <div className="mt-3 rounded-xl bg-zinc-950 p-3 text-xs text-zinc-500">
                 {order.courier_updated_at
                   ? `GPS terakhir: ${new Date(order.courier_updated_at).toLocaleTimeString("id-ID")}`
-                  : "GPS kurir belum tersedia"}{" 
+                  : "GPS kurir belum tersedia"}
+                {" · Posisi diperbarui otomatis."}
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+}
