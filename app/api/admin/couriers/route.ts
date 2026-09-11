@@ -7,10 +7,11 @@ const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 const secretKey = process.env.SUPABASE_SECRET_KEY!;
 
 async function adminClients(req: Request) {
+  if (!secretKey) throw new Error("SUPABASE_SECRET_KEY belum dipasang di server.");
   const auth = req.headers.get("authorization");
   if (!auth?.startsWith("Bearer ")) return null;
   const token = auth.slice(7);
-  const userClient = createClient(url, publicKey, { auth: { persistSession: false } });
+  const userClient = createClient(url, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || data.user?.email?.toLowerCase() !== ADMIN_EMAIL) return null;
   const admin = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -18,57 +19,69 @@ async function adminClients(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const clients = await adminClients(req);
-  if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
-  const { data, error } = await clients.admin.from("couriers").select("id,name,phone,is_active,created_at,updated_at").order("created_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ couriers: data ?? [] });
+  try {
+    const clients = await adminClients(req);
+    if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
+    const { data, error } = await clients.admin.from("couriers").select("id,name,phone,is_active,created_at,updated_at").order("created_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ couriers: data ?? [] });
+  } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 }); }
 }
 
 export async function POST(req: Request) {
-  const clients = await adminClients(req);
-  if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
-  const body = await req.json().catch(() => null);
-  const name = String(body?.name ?? "").trim();
-  const phone = String(body?.phone ?? "").trim();
-  const email = String(body?.email ?? "").trim().toLowerCase();
-  const password = String(body?.password ?? "");
-  if (name.length < 2 || !email.includes("@") || password.length < 8) return NextResponse.json({ error: "Nama, email valid, dan password minimal 8 karakter wajib diisi." }, { status: 400 });
-
-  const { data: created, error: createError } = await clients.admin.auth.admin.createUser({
-    email, password, email_confirm: true, user_metadata: { name, role: "courier" }
-  });
-  if (createError || !created.user) return NextResponse.json({ error: createError?.message ?? "Gagal membuat akun." }, { status: 400 });
-
-  const { error: rowError } = await clients.admin.from("couriers").insert({ id: created.user.id, name, phone: phone || null, is_active: true });
-  if (rowError) {
-    await clients.admin.auth.admin.deleteUser(created.user.id);
-    return NextResponse.json({ error: rowError.message }, { status: 500 });
-  }
-  return NextResponse.json({ ok: true, courier: { id: created.user.id, name, phone, is_active: true } });
+  try {
+    const clients = await adminClients(req);
+    if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
+    const body = await req.json().catch(() => null);
+    const name = String(body?.name ?? "").trim();
+    const phone = String(body?.phone ?? "").trim();
+    const email = String(body?.email ?? "").trim().toLowerCase();
+    const password = String(body?.password ?? "");
+    if (name.length < 2 || !email.includes("@") || password.length < 8) return NextResponse.json({ error: "Nama, email valid, dan password minimal 8 karakter wajib diisi." }, { status: 400 });
+    const { data: created, error: createError } = await clients.admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name, role: "courier" } });
+    if (createError || !created.user) return NextResponse.json({ error: createError?.message ?? "Gagal membuat akun." }, { status: 400 });
+    const { error: rowError } = await clients.admin.from("couriers").insert({ id: created.user.id, name, phone: phone || null, is_active: true });
+    if (rowError) { await clients.admin.auth.admin.deleteUser(created.user.id); return NextResponse.json({ error: rowError.message }, { status: 500 }); }
+    return NextResponse.json({ ok: true, courier: { id: created.user.id, name, phone, is_active: true } });
+  } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 }); }
 }
 
 export async function PATCH(req: Request) {
-  const clients = await adminClients(req);
-  if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
-  const body = await req.json().catch(() => null);
-  const id = String(body?.id ?? "");
-  const isActive = Boolean(body?.is_active);
-  if (!id) return NextResponse.json({ error: "ID kurir tidak valid." }, { status: 400 });
-  const { error } = await clients.admin.from("couriers").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
+  try {
+    const clients = await adminClients(req);
+    if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
+    const body = await req.json().catch(() => null);
+    const id = String(body?.id ?? "");
+    if (!id) return NextResponse.json({ error: "ID kurir tidak valid." }, { status: 400 });
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (typeof body?.name === "string") { const name = body.name.trim(); if (name.length < 2) return NextResponse.json({ error: "Nama kurir terlalu pendek." }, { status: 400 }); updates.name = name; }
+    if (typeof body?.phone === "string") updates.phone = body.phone.trim() || null;
+    if (typeof body?.is_active === "boolean") updates.is_active = body.is_active;
+    if (Object.keys(updates).length > 1) {
+      const { error } = await clients.admin.from("couriers").update(updates).eq("id", id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (body?.password !== undefined) {
+      const password = String(body.password);
+      if (password.length < 8) return NextResponse.json({ error: "Password minimal 8 karakter." }, { status: 400 });
+      const { error } = await clients.admin.auth.admin.updateUserById(id, { password });
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 }); }
 }
 
 export async function DELETE(req: Request) {
-  const clients = await adminClients(req);
-  if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
-  const body = await req.json().catch(() => null);
-  const id = String(body?.id ?? "");
-  if (!id) return NextResponse.json({ error: "ID kurir tidak valid." }, { status: 400 });
-  const { data: activeOrders } = await clients.admin.from("orders").select("id").eq("courier_id", id).in("status", ["processing", "delivering"]);
-  if ((activeOrders ?? []).length) return NextResponse.json({ error: "Kurir masih memiliki order aktif. Nonaktifkan saja terlebih dahulu." }, { status: 409 });
-  const { error: authError } = await clients.admin.auth.admin.deleteUser(id);
-  if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
-  return NextResponse.json({ ok: true });
+  try {
+    const clients = await adminClients(req);
+    if (!clients) return NextResponse.json({ error: "Tidak berwenang" }, { status: 401 });
+    const body = await req.json().catch(() => null);
+    const id = String(body?.id ?? "");
+    if (!id) return NextResponse.json({ error: "ID kurir tidak valid." }, { status: 400 });
+    const { data: activeOrders } = await clients.admin.from("orders").select("id").eq("courier_id", id).in("status", ["processing", "delivering"]);
+    if ((activeOrders ?? []).length) return NextResponse.json({ error: "Kurir masih memiliki order aktif. Nonaktifkan saja terlebih dahulu." }, { status: 409 });
+    const { error: authError } = await clients.admin.auth.admin.deleteUser(id);
+    if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Server error" }, { status: 500 }); }
 }
