@@ -3,14 +3,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, Check, ChevronRight, Clock3, MapPin, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
-type Order={id:string;created_at:string;customer_name:string;customer_phone:string;customer_address:string;notes:string;payment_method:string;status:string;subtotal:number;delivery_fee:number;total:number;delivery_method:string};
+type Order={id:string;created_at:string;customer_name:string;customer_phone:string;customer_address:string;notes:string;payment_method:string;payment_note:string|null;status:string;subtotal:number;delivery_fee:number;total:number;delivery_method:string};
 const money=(n:number)=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(n);
 const shortId=(id:string)=>id.slice(0,8).toUpperCase();
 const payment=(v:string)=>v==="qris"?"QRIS":v==="transfer"?"Transfer":"Tunai";
 
 export default function AdminIncomingOrders(){
  const[orders,setOrders]=useState<Order[]>([]),[open,setOpen]=useState(false),[loading,setLoading]=useState(false),[selected,setSelected]=useState<Order|null>(null),[updating,setUpdating]=useState(false),[known,setKnown]=useState<string[]>([]);
- const load=useCallback(async()=>{const{data}=await supabase.from("orders").select("id,created_at,customer_name,customer_phone,customer_address,notes,payment_method,status,subtotal,delivery_fee,total,delivery_method").in("status",["pending","processing"]).neq("notes","Transaksi kasir POS").order("created_at",{ascending:false}).limit(30);setOrders((data||[]) as Order[])},[]);
+ const load=useCallback(async()=>{const{data}=await supabase.from("orders").select("id,created_at,customer_name,customer_phone,customer_address,notes,payment_method,payment_note,status,subtotal,delivery_fee,total,delivery_method").in("status",["pending","processing"]).not("payment_note","like","%· POS").order("created_at",{ascending:false}).limit(30);setOrders((data||[]) as Order[])},[]);
  useEffect(()=>{let mounted=true;(async()=>{await load();if(!mounted)return;})();const id=setInterval(load,5000);return()=>{mounted=false;clearInterval(id)}},[load]);
  const pending=orders.filter(o=>o.status==="pending");
  useEffect(()=>{if(!pending.length)return;const fresh=pending.filter(o=>!known.includes(o.id));if(fresh.length){setOpen(true);setKnown(p=>[...p,...fresh.map(o=>o.id)].slice(-100));try{navigator.vibrate?.([100,60,100])}catch{}}},[pending,known]);
