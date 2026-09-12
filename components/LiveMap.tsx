@@ -10,9 +10,9 @@ function RouteLine({points,center,zoom}:{points:Point[];center:{lat:number;lng:n
  const [route,setRoute]=useState<[number,number][]>([]);
  const routeKey=points.map(p=>`${p.lat},${p.lng}`).join(";");
  useEffect(()=>{let cancelled=false; const valid=points.filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)); if(valid.length<2){setRoute([]);return;}
-  const start=valid[0],end=valid[valid.length-1];
-  const url=`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=false`;
-  fetch(url).then(r=>r.ok?r.json():null).then(data=>{if(!cancelled){const coords=data?.routes?.[0]?.geometry?.coordinates;if(Array.isArray(coords))setRoute(coords);}}).catch(()=>{if(!cancelled)setRoute([]);});
+  const pairs=[] as [Point,Point][];
+  for(let i=0;i<valid.length-1;i++) pairs.push([valid[i],valid[i+1]]);
+  Promise.all(pairs.map(([start,end])=>{const url=`https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson&steps=false`;return fetch(url).then(r=>r.ok?r.json():null).catch(()=>null);})).then(results=>{if(cancelled)return;const merged:[number,number][]=[];for(const data of results){const coords=data?.routes?.[0]?.geometry?.coordinates;if(!Array.isArray(coords)||coords.length<2)continue;for(const point of coords as [number,number][]) {if(!merged.length||merged[merged.length-1][0]!==point[0]||merged[merged.length-1][1]!==point[1])merged.push(point);}}setRoute(merged);});
   return()=>{cancelled=true};
  },[routeKey]);
  if(route.length<2)return null;
