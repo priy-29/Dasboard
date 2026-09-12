@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { LogOut } from "lucide-react";
 import LiveMap from "../../components/LiveMap";
 import { supabase } from "../../lib/supabase";
 
@@ -58,6 +59,7 @@ export default function CourierPage() {
   const [requesting, setRequesting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const watch = useRef<number | null>(null);
 
   async function loadTasks() {
@@ -88,6 +90,17 @@ export default function CourierPage() {
     setOrder(nextOrder);
     setTracking(Boolean(nextOrder.courier_tracking));
     setTab(nextOrder.status === "processing" ? "ready" : "active");
+  }
+
+  async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    if (watch.current != null) {
+      navigator.geolocation.clearWatch(watch.current);
+      watch.current = null;
+    }
+    await supabase.auth.signOut({ scope: "local" });
+    location.href = "/courier/login";
   }
 
   async function claimTask() {
@@ -246,7 +259,7 @@ export default function CourierPage() {
       if (cancelled) return;
 
       if (!courier?.is_active) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         location.href = "/courier/login";
         return;
       }
@@ -300,11 +313,21 @@ export default function CourierPage() {
   return (
     <main className="min-h-screen bg-zinc-950 p-4 text-white md:p-6">
       <div className="mx-auto max-w-xl">
-        <div
-          className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-2xl shadow-lg shadow-orange-950/20"
-          aria-label="Logo rumah makan"
-        >
-          🍜
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-2xl shadow-lg shadow-orange-950/20"
+            aria-label="Logo rumah makan"
+          >
+            🍜
+          </div>
+          <button
+            onClick={logout}
+            disabled={loggingOut}
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-bold text-zinc-300 transition hover:border-red-500/40 hover:bg-red-950/30 hover:text-red-300 disabled:opacity-50"
+          >
+            <LogOut size={15} />
+            {loggingOut ? "Keluar..." : "Logout"}
+          </button>
         </div>
 
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900/80 p-5 text-center shadow-xl">
