@@ -2,5 +2,100 @@
 
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
+html { background: #07090d; }
 body { margin: 0; background: #09090b; color: #fafafa; font-family: Arial, Helvetica, sans-serif; }
 button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+
+/* Admin POS polish */
+.admin-shell main {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 82% -5%, rgba(16,185,129,.12), transparent 28%),
+    radial-gradient(circle at 5% 35%, rgba(59,130,246,.06), transparent 25%),
+    #07090d !important;
+}
+.admin-shell header {
+  box-shadow: 0 10px 35px rgba(0,0,0,.16);
+}
+.admin-shell aside {
+  box-shadow: 18px 0 50px rgba(0,0,0,.12);
+}
+.admin-shell section {
+  border-radius: 24px !important;
+}
+.admin-shell article {
+  border-radius: 18px !important;
+}
+.admin-shell main section:first-of-type {
+  position: relative;
+  isolation: isolate;
+}
+.admin-shell main section:first-of-type::after {
+  content: "";
+  position: absolute;
+  right: -70px;
+  top: -90px;
+  width: 230px;
+  height: 230px;
+  border-radius: 999px;
+  background: rgba(16,185,129,.07);
+  filter: blur(30px);
+  pointer-events: none;
+  z-index: -1;
+}
+.admin-shell section h2,
+.admin-shell section h3 {
+  letter-spacing: -.025em;
+}
+.admin-shell section button,
+.admin-shell section a {
+  min-height: 40px;
+}
+.admin-shell section button:hover,
+.admin-shell section a:hover {
+  filter: brightness(1.08);
+}
+.admin-shell input,
+.admin-shell select {
+  border-radius: 14px !important;
+}
+
+@media (max-width: 1023px) {
+  .admin-shell main {
+    overflow-x: hidden;
+  }
+  .admin-shell main > div > div {
+    padding-top: 12px !important;
+  }
+  .admin-shell header {
+    box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  }
+  .admin-shell header + div {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .admin-shell main section {
+    border-radius: 20px !important;
+  }
+  .admin-shell main section:first-of-type {
+    padding: 18px !important;
+  }
+  .admin-shell main section:first-of-type h2 {
+    font-size: 27px !important;
+    line-height: 1.05;
+  }
+  .admin-shell main section:first-of-type > div > div:last-child {
+    width: 100%;
+  }
+  .admin-shell main section:first-of-type > div > div:last-child > div {
+    min-width: 0 !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-shell main > div > div {
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+}
