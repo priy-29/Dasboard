@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import AdminBottomNav from "../../components/AdminBottomNav";
 import AdminNotificationBell from "../../components/AdminNotificationBell";
+import AdminIncomingOrders from "../../components/AdminIncomingOrders";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return <div className="admin-shell">
     {children}
     <AdminNotificationBell />
+    <AdminIncomingOrders />
     <AdminBottomNav />
     <style>{`
       .admin-shell{min-height:100dvh;background:radial-gradient(900px 520px at 85% -10%,rgba(16,185,129,.13),transparent 60%),radial-gradient(700px 480px at -10% 35%,rgba(59,130,246,.06),transparent 60%),#07090d;color:#f4f4f5;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
@@ -24,31 +26,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       .admin-shell input:focus,.admin-shell select:focus,.admin-shell textarea:focus{border-color:rgba(52,211,153,.48)!important;box-shadow:0 0 0 3px rgba(52,211,153,.07),inset 0 1px 0 rgba(255,255,255,.025)}
       .admin-shell select{cursor:pointer}
       .admin-shell .admin-bottom-nav{display:none}
-
-      /* Shared page chrome for the secondary admin screens. */
-      .admin-shell main > div.mx-auto.max-w-6xl,
-      .admin-shell main > div.mx-auto.max-w-4xl{padding-top:clamp(22px,4vw,42px)!important}
-      .admin-shell main > div.mx-auto.max-w-6xl > header{margin-bottom:24px!important;padding:4px 0 0!important}
-      .admin-shell main > div.mx-auto.max-w-6xl > header h1,
-      .admin-shell main > div.mx-auto.max-w-4xl h1{font-size:clamp(2.05rem,5vw,3.25rem)!important}
-      .admin-shell main > div.mx-auto.max-w-6xl > header p:last-child,
-      .admin-shell main > div.mx-auto.max-w-4xl > div > p:last-child{max-width:620px;line-height:1.55}
-      .admin-shell main > div.mx-auto.max-w-6xl > div.grid.grid-cols-3{gap:12px!important;margin-bottom:20px!important}
-      .admin-shell main > div.mx-auto.max-w-6xl > div.grid.grid-cols-3 > div{min-height:104px;border-radius:22px!important;padding:18px!important;background:linear-gradient(145deg,rgba(22,27,34,.94),rgba(10,13,18,.88))!important}
-      .admin-shell main > div.mx-auto.max-w-6xl form,
-      .admin-shell main > div.mx-auto.max-w-6xl > section,
-      .admin-shell main > div.mx-auto.max-w-4xl form,
-      .admin-shell main > div.mx-auto.max-w-4xl aside > div{border-radius:26px!important;background:linear-gradient(145deg,rgba(18,22,28,.96),rgba(10,13,18,.9))!important;box-shadow:0 20px 55px rgba(0,0,0,.18)!important}
-      .admin-shell main > div.mx-auto.max-w-6xl form{padding:24px!important}
-      .admin-shell main > div.mx-auto.max-w-6xl > section{padding:24px!important}
-      .admin-shell main > div.mx-auto.max-w-4xl{max-width:1080px!important}
-      .admin-shell main > div.mx-auto.max-w-4xl > div.mb-6{margin-bottom:22px!important;padding:4px 0!important}
-      .admin-shell main > div.mx-auto.max-w-4xl > div.grid{gap:16px!important}
-      .admin-shell main > div.mx-auto.max-w-4xl form{padding:24px!important}
-      .admin-shell main > div.mx-auto.max-w-4xl form > div.rounded-2xl,
-      .admin-shell main > div.mx-auto.max-w-4xl form > div.mt-4{border-radius:20px!important;background:rgba(5,7,10,.58)!important}
-      .admin-shell main > div.mx-auto.max-w-4xl aside{gap:16px!important}
-
+      .admin-shell .admin-incoming-trigger{right:72px}
       @media(max-width:1023px){
         .admin-shell{padding-bottom:0}
         .admin-shell main{padding-left:0!important;padding-right:0!important;padding-bottom:0!important}
@@ -58,6 +36,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         .admin-shell article{border-radius:20px!important}
         .admin-shell .admin-bottom-nav{display:block}
         .admin-shell .admin-notification-trigger{top:12px!important;right:12px!important;border-radius:16px!important;background:rgba(10,14,19,.86)!important;border-color:rgba(255,255,255,.08)!important;box-shadow:0 10px 30px rgba(0,0,0,.25)!important}
+        .admin-shell .admin-incoming-trigger{top:12px!important;right:68px!important}
         .admin-shell h1{font-size:clamp(2rem,9vw,2.75rem)!important}
         .admin-shell main > div.mx-auto.max-w-6xl,
         .admin-shell main > div.mx-auto.max-w-4xl{padding:24px 16px 100px!important}
